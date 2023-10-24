@@ -1,182 +1,327 @@
+#         -*- coding:utf-8 -*-        #
+#  Copyright (c) 2019 - 2039 XueQian  #
+#        version_added:: 1.4.0          #
+
 from tkinter import messagebox
 from tkinter import font
 import tkinter as tk
 import urllib.request
 import subprocess
-import threading
+import threading  # 可能看起来没用，但引用在 272 行（附近）！
 import random
 import easygui
 import shutil
+import time
 import json
 import sys
 import os
 
-exit_code = 0
-# 获取Minecraft版本列表数据
-data = json.loads(urllib.request.urlopen("https://launchermeta.mojang.com/mc/game/version_manifest.json").read())
-versions = [v["id"] for v in data["versions"] if v["type"] == "release"]
+Running = 0
+Ctrl_C = 0
 
 
-class MinecraftLauncher:
-    def __init__(self, master):
-        self.master = master
-        self.master.title("Minecraft Server Launcher")
-        self.master.geometry("310x187")
-        self.master.resizable(False, False)
-        self.master.protocol("WM_DELETE_WINDOW", None)
+def change(name: str, value: str, eval_: str = 'str') -> None:
+    global stop_button
+    exec(f'{name} = {value}')
+    eval(eval_)
+    return None
 
-        # 设置字体
-        self.custom_font = font.Font(family="CMSXTJ", size=12)
 
-        # 创建选择版本的区域
-        self.version_label = tk.Label(self.master, text="选择版本：", font=self.custom_font)
-        self.version_label.place(x=10, y=10)
-        self.version_options = ["Java版", "基岩版"]
-        self.version_var = tk.StringVar()
-        self.version_var.set(self.version_options[0])
-        self.version_choices = tk.OptionMenu(self.master, self.version_var, *self.version_options,
-                                             command=self.update_options)
-        self.version_choices.config(font=self.custom_font)
-        self.version_choices.place(x=90, y=7)
+def update_options(value):
+    if value == "Java版":
+        hexin_options = os.listdir('./hexin/Java Edit')
+        cundang_options = ['New'] + os.listdir('./Java Edit')
+    elif value == "基岩版":
+        hexin_options = os.listdir('./hexin/Bedrock Edit')
+        cundang_options = ['New'] + os.listdir('./Bedrock Edit')
+    else:
+        hexin_options = []
+        cundang_options = []
+    hexin_var.set(random.choice(hexin_options))
+    hexin_choices['menu'].delete(0, 'end')
+    for option in hexin_options:
+        hexin_choices['menu'].add_command(label=option, command=tk._setit(hexin_var, option))
+    cundang_var.set("New")
+    cundang_choices['menu'].delete(0, 'end')
+    for option in cundang_options:
+        cundang_choices['menu'].add_command(label=option, command=tk._setit(cundang_var, option))
 
-        # 创建选择核心的区域
-        self.hexin_label = tk.Label(self.master, text="选择核心：", font=self.custom_font)
-        self.hexin_label.place(x=10, y=53)
-        self.hexin_options = os.listdir('./hexin/Java Edit')
-        self.hexin_var = tk.StringVar()
-        self.hexin_var.set(random.choice(self.hexin_options))
-        self.hexin_choices = tk.OptionMenu(self.master, self.hexin_var, *self.hexin_options)
-        self.hexin_choices.config(font=self.custom_font)
-        self.hexin_choices.place(x=90, y=50)
 
-        # 创建选择存档的区域
-        self.cundang_label = tk.Label(self.master, text="选择存档：", font=self.custom_font)
-        self.cundang_label.place(x=10, y=96)
-        self.cundang_var = tk.StringVar()
-        self.cundang_var.set("New")
-        self.cundang_options = ['New'] + os.listdir('./Java Edit')
-        if 'jre-17.0.2-full' in self.cundang_options:
-            self.cundang_options.remove('jre-17.0.2-full')
-        self.cundang_choices = tk.OptionMenu(self.master, self.cundang_var, *self.cundang_options)
-        self.cundang_choices.config(font=self.custom_font)
-        self.cundang_choices.place(x=90, y=93)
+def run_minecraft():
+    global run_button, Ctrl_C, stop_button, Running
 
-        # 创建按钮区域
-        self.run_button = tk.Button(self.master, text="运行", command=self.run_minecraft, font=self.custom_font)
-        self.run_button.place(x=10, y=140)
+    hexin = hexin_var.get()
 
-        # 创建打开存档的按钮
-        self.open_button = tk.Button(self.master, text="打开存档", command=self.open_cundang, font=self.custom_font)
-        self.open_button.place(x=60, y=140)
+    kongzhi = tk.Toplevel()
+    run_button.config(state="disabled")
 
-        self.down_button = tk.Button(self.master, text="下载", command=self.down_minecraft, font=self.custom_font)
-        self.down_button.place(x=143, y=140)
-
-        self.exit_button = tk.Button(self.master, text="退出", command=self.master.quit, font=self.custom_font)
-        self.exit_button.place(x=193, y=140)
-
-    def update_options(self, value):
-        if value == "Java版":
-            self.hexin_options = os.listdir('./hexin/Java Edit')
-            self.cundang_options = ['New'] + os.listdir('./Java Edit')
-        elif value == "基岩版":
-            self.hexin_options = os.listdir('./hexin/Bedrock Edit')
-            self.cundang_options = ['New'] + os.listdir('./Bedrock Edit')
-        self.hexin_var.set(random.choice(self.hexin_options))
-        self.hexin_choices['menu'].delete(0, 'end')
-        for option in self.hexin_options:
-            self.hexin_choices['menu'].add_command(label=option, command=tk._setit(self.hexin_var, option))
-        self.cundang_var.set("New")
-        self.cundang_choices['menu'].delete(0, 'end')
-        for option in self.cundang_options:
-            self.cundang_choices['menu'].add_command(label=option, command=tk._setit(self.cundang_var, option))
-
-    def run_minecraft(self):
-        hexin = self.hexin_var.get()
-
-        if self.version_var.get() == "Java版":
-            if self.cundang_var.get() == 'New':
-                cundang = easygui.enterbox('存档名', '存档名')
-                if cundang is None or cundang == '':
-                    return
-                shutil.copytree('./muban/Java Edit', './Java Edit/' + cundang)
-            else:
-                cundang = self.cundang_var.get()
-            threading.Thread(target=lambda: self.run_time(cundang, hexin, 'java')).start()
-
-        elif self.version_var.get() == "基岩版":
-            if self.cundang_var.get() == 'New':
-                cundang = easygui.enterbox('存档名', '存档名')
-                if cundang is None or cundang == '':
-                    return
-                shutil.copytree('./muban/Bedrock Edit', './Bedrock Edit/' + cundang)
-            else:
-                cundang = self.cundang_var.get()
-            threading.Thread(target=lambda: self.run_time(cundang, hexin, '')).start()
-
-    def open_cundang(self):
-        cundang = self.cundang_var.get()
-        if cundang == 'New':
-            return
-        if self.version_var.get() == "Java版":
-            os.startfile(f"Java Edit\\{cundang}")
-        elif self.version_var.get() == "基岩版":
-            os.startfile(f"Bedrock Edit\\{cundang}")
-
-    def down_minecraft(self):
-        c = easygui.buttonbox('附带', '附带', ['nothing', 'plugins', 'plugins & mod'])
-        if c == 'nothing':
-            version = easygui.choicebox("选择 Java版 版本", "Minecraft启动器", choices=versions)
-            if not version:
+    # information = []
+    if version_var.get() == "Java版":
+        if cundang_var.get() == 'New':
+            cundang = easygui.enterbox('存档名', '存档名')
+            if cundang is None or cundang == '':
                 return
-            data = json.loads(
-                urllib.request.urlopen(f"https://launchermeta.mojang.com/mc/game/version_manifest.json").read())
-            url = [v["url"] for v in data["versions"] if v["id"] == version][0]
-            data = json.loads(urllib.request.urlopen(url).read())
-            url = data["downloads"]["client"]["url"]
-            messagebox.showinfo(message="正在下载，请稍等片刻...", title="Minecraft启动器")
-            urllib.request.urlretrieve(url, f"./hexin/Java Edit/server-{version}.jar")
-            easygui.msgbox("下载完成！", "Minecraft启动器")
-        elif c == 'plugins':
-            os.system('start https://getbukkit.org/download/craftbukkit')
+            shutil.copytree('./muban/Java Edit', './Java Edit/' + cundang)
         else:
-            os.system('start https://mohistmc.com/download/')
+            cundang = cundang_var.get()
 
-    def run_time(self, cundang, hexin, b):
-        if b == 'java':
-            self.run_button.config(state="disabled")
-            os.chdir('./Java Edit/' + cundang)
-            subprocess.run(
-                r'"C:\{minec}\services\Java Edit\jre-17.0.2-full\bin\java" -jar "C:\{minec}\services\hexin\Java Edit' + '\\' + hexin + '"')
-            easygui.msgbox('运行完毕')
-            os.chdir('../..')
-            self.run_button.config(state="normal")
-        else:
-            self.run_button.config(state="disabled")
-            os.chdir('./Bedrock Edit/' + cundang)
-            subprocess.run(r'"C:\{minec}\services\hexin\Bedrock Edit' + '\\' + hexin + '"')
-            easygui.msgbox('运行完毕')
-            os.chdir('../..')
-            self.run_button.config(state="normal")
+        # threading.Thread(target=lambda: run_time(cundang, hexin, 'java')).start()
+        os.chdir('./Java Edit/' + cundang)
+        information = ["Java版", cundang, hexin]
+        command = r'"..\..\jre\bin\java" -jar "..\..\hexin\Java Edit' + rf'\{hexin}" gui'
 
-    def exit(self):
-        global exit_code
-        a = easygui.enterbox('您使用的是未激活的程序，不激活对导致您无法使用某些功能\n请输入激活秘钥以使用全部功能！', '激活')
-        if a == '':
-            if exit_code <= 3:
-                exit_code += 1
-                easygui.msgbox('秘钥错误，请重新输入！', '秘钥错误')
-            else:
-                self.master.quit()
-                sys.exit()
+    else:  # elif version_var.get() == "基岩版":
+        if cundang_var.get() == 'New':
+            cundang = easygui.enterbox('存档名', '存档名')
+            if cundang is None or cundang == '':
+                return
+            shutil.copytree('./muban/Bedrock Edit', './Bedrock Edit/' + cundang)
         else:
-            easygui.msgbox('秘钥错误，请重新输入！', '秘钥错误')
+            cundang = cundang_var.get()
+        # threading.Thread(target=lambda: run_time(cundang, hexin, '')).start()
+        os.chdir('./Bedrock Edit/' + cundang)
+        information = ["Java版", cundang, hexin]
+        command = r'"..\..\hexin\Bedrock Edit' + rf'\{hexin}"'
+
+    # threading.Thread(target=lambda: run_time(command)).start()
+
+    if information[0] == "Java版":
+        kongzhi.title("Control Panle")
+        kongzhi.geometry("310x187")
+        kongzhi.resizable(False, False)
+        kongzhi.protocol("WM_DELETE_WINDOW", None)
+
+        statue_label = tk.Label(kongzhi, text="状态：", font=custom_font)
+        statue_label.place(x=10, y=10)
+
+        s_label = tk.Label(kongzhi, text='加载中', font=custom_font)
+        s_label.place(x=100, y=10)
+
+        stop_button = tk.Button(kongzhi, text="直接停止",
+                                command=lambda: change('Ctrl_C', '1', 'stop_button.config(state="disabled")'),
+                                font=custom_font)
+        stop_button.place(x=200, y=10)
+
+        Running = 1
+        a = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT)
+        s = 0
+        now = '出现未知错误！'
+        lastlog = []
+        while 1:
+            line = a.stdout.readline()
+            if not line:
+                break
+            elif b'For help, type "help"' in line:
+                s_label.configure(text="运行中")
+            elif b"Stopping the server" in line:
+                s_label.configure(text="正在关闭")
+                now = '运行完毕'
+            elif b"FAILED TO BIND TO PORT" in line:
+                now = '端口被占用！'
+            elif b"EULA" in line or b"eula" in line:
+                now = '您需要同意最终用户许可协议才能运行服务器。'
+                os.system(r'notepad eula.txt')
+            # print(line, b"FAILED TO BIND TO PORT" in line)
+
+            if Ctrl_C == 1 and s == 0:
+                s_label.configure(text="正在关闭")
+                # TODO: 我不想使用kill方法强制关闭，而是使用stop指令关闭，但还没有找到方法。
+                time.sleep(1)
+                a.kill()
+                # a.communicate(b'stop\n')
+                s = 1
+
+            if len(lastlog) == 30:
+                del lastlog[0]
+            lastlog.append(line)
+
+        run_button.config(state="normal")
+        kongzhi.destroy()
+        if now != '运行完毕':
+            name = f"./{time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))}log_（{information[0]})({information[1]})({information[2]}）.txt"
+            logfile = open(name, 'wb')
+            logtext = command.encode() + b'\n'
+            for ii in lastlog:
+                logtext += ii
+            logfile.write(logtext)
+            logfile.close()
+            easygui.msgbox(now + '\n最后30条日志被保存在：' + os.path.abspath(name))
+        else:
+            easygui.msgbox(now)
+        Ctrl_C = 0
+    else:  # information[0] == "基岩版"
+        Running = 1
+        subprocess.run(command)
+        easygui.msgbox('运行完毕')
+    Running = 0
+    os.chdir('../..')
+
+
+def open_cundang():
+    cundang = cundang_var.get()
+    if cundang == 'New':
         return
+    if version_var.get() == "Java版":
+        os.startfile(f"Java Edit\\{cundang}")
+    elif version_var.get() == "基岩版":
+        os.startfile(f"Bedrock Edit\\{cundang}")
 
 
+def down_minecraft():
+    c = easygui.buttonbox('附带', '附带', ['nothing', 'plugins', 'plugins & mod'])
+    if c == 'nothing':
+        version = easygui.choicebox("选择 Java版 版本", "Minecraft启动器", choices=versions)
+        if not version:
+            return
+        data = json.loads(
+            urllib.request.urlopen(f"https://launchermeta.mojang.com/mc/game/version_manifest.json").read())
+        url = [v["url"] for v in data["versions"] if v["id"] == version][0]
+        data = json.loads(urllib.request.urlopen(url).read())
+        url = data["downloads"]["client"]["url"]
+        messagebox.showinfo(message="正在下载，请稍等片刻...", title="Minecraft启动器")
+        urllib.request.urlretrieve(url, f"./hexin/Java Edit/server-{version}.jar")
+        easygui.msgbox("下载完成！", "Minecraft启动器")
+    elif c == 'plugins':
+        os.system('start https://getbukkit.org/download/craftbukkit')
+    else:
+        os.system('start https://mohistmc.com/download/')
 
-if __name__ == "__main__":
+
+def quit():
+    global root, exit_button
+    exit_button.config(state="disabled")
+    if Running == 1:
+        if Ctrl_C == 1:
+            easygui.msgbox('请等待服务器关闭。')
+            exit_button.config(state="normal")
+            return 1
+        easygui.msgbox('请先关闭服务器。')
+        exit_button.config(state="normal")
+        return 1
+    root.quit()
+    sys.exit()
+
+
+'''
+def run_time(command):
+    global run_button, Running, Outgoing, Ctrl_C
+    # subprocess.run(command)
+    a = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT)
+
+    s = 0
+    while True:
+        line = a.stdout.readline()
+        if not line:
+            break
+
+        if b'For help, type "help"' in line:
+            Outgoing = 1
+        elif b"Stopping the server" in line:
+            break
+        if Ctrl_C == 1 and s == 0:
+            a.kill()
+            # a.communicate(b'stop\n')
+            s = 1
+            time.sleep(1)
+
+    easygui.msgbox('运行完毕')
+
+    Running = 0
+    Outgoing = 0
+    Ctrl_C = 0
+
+    os.chdir('../..')
+    return
+'''
+
+try:
+    data = json.loads(urllib.request.urlopen("https://launchermeta.mojang.com/mc/game/version_manifest.json").read())
+    versions = [v["id"] for v in data["versions"] if v["type"] == "release"]
+except:
+    versions = ['1.19.4']
+
+if __name__ == '__main__':
+    # 判断是否第一次开启
+    if not os.path.isdir('./hexin'):
+        def makedirs(a: list):
+            es = ''
+            for i in a:
+                try:
+                    os.makedirs(i)
+                except Exception as e:
+                    es += str(e)
+            return
+
+
+        makedirs(
+            ['.\hexin\Bedrock Edit', '.\hexin\Java Edit', '.\muban\Bedrock Edit', '.\muban\Java Edit', '.\Bedrock Edit',
+             '.\Java Edit'])
+        with open(r'.\muban\Java Edit\eula.txt', 'w') as e:
+            e.write('#Created by XueQian\neula=true')
+
+        easygui.msgbox('欢入！\n请将核心放置在 hexin 文件夹中，模板放置在 muban 文件夹中。然后重启程序。')
+        sys.exit()
+
     root = tk.Tk()
-    root.iconbitmap(r"D:\xue\ico\xue.ico")
-    launcher = MinecraftLauncher(root)
+    file_ = os.path.dirname(os.path.abspath(__file__))
+    root.iconbitmap(file_ + r"\xue.ico")
+
+    root.title("Minecraft Server Launcher")
+    root.geometry("310x187")
+    root.resizable(False, False)
+    root.protocol("WM_DELETE_WINDOW", None)
+
+    # 设置字体
+    custom_font = font.Font(family="CMSXTJ", size=12)
+
+    # 创建选择版本的区域
+    version_label = tk.Label(root, text="选择版本：", font=custom_font)
+    version_label.place(x=10, y=10)
+    version_options = ["Java版", "基岩版"]
+    version_var = tk.StringVar()
+    version_var.set(version_options[0])
+    version_choices = tk.OptionMenu(root, version_var, *version_options,
+                                    command=update_options)
+    version_choices.config(font=custom_font)
+    version_choices.place(x=90, y=7)
+
+    # 创建选择核心的区域
+    hexin_label = tk.Label(root, text="选择核心：", font=custom_font)
+    hexin_label.place(x=10, y=53)
+    hexin_options = os.listdir('./hexin/Java Edit')
+    hexin_var = tk.StringVar()
+    hexin_var.set(random.choice(hexin_options))
+    hexin_choices = tk.OptionMenu(root, hexin_var, *hexin_options)
+    hexin_choices.config(font=custom_font)
+    hexin_choices.place(x=90, y=50)
+
+    # 创建选择存档的区域
+    cundang_label = tk.Label(root, text="选择存档：", font=custom_font)
+    cundang_label.place(x=10, y=96)
+    cundang_var = tk.StringVar()
+    cundang_var.set("New")
+    cundang_options = ['New'] + os.listdir('./Java Edit')
+    if 'jre-17.0.2-full' in cundang_options:
+        cundang_options.remove('jre-17.0.2-full')
+    cundang_choices = tk.OptionMenu(root, cundang_var, *cundang_options)
+    cundang_choices.config(font=custom_font)
+    cundang_choices.place(x=90, y=93)
+
+    # 创建按钮区域
+    run_button = tk.Button(root, text="运行", command=lambda: eval('threading.Thread(target=run_minecraft).start()'),
+                           font=custom_font)
+    run_button.place(x=10, y=140)
+
+    # 创建打开存档的按钮
+    open_button = tk.Button(root, text="打开存档", command=open_cundang, font=custom_font)
+    open_button.place(x=60, y=140)
+
+    down_button = tk.Button(root, text="下载", command=down_minecraft, font=custom_font)
+    down_button.place(x=143, y=140)
+
+    exit_button = tk.Button(root, text="退出", command=quit, font=custom_font)
+    exit_button.place(x=193, y=140)
+
     root.mainloop()
