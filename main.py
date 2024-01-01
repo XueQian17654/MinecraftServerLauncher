@@ -11,6 +11,7 @@ import threading  # 可能看起来没用，但引用在 272 行（附近）！
 import random
 import easygui
 import shutil
+import psutil
 import time
 import json
 import sys
@@ -21,8 +22,10 @@ Ctrl_C = 0
 
 
 def change(name: str, value: str, eval_: str = 'str') -> None:
-    global stop_button
-    exec(f'{name} = {value}')
+    global stop_button, Running, Ctrl_C
+    # Ctrl_C = 1
+    # print(name, value)
+    exec(f'global stop_button, Running, Ctrl_C\n{name} = {value}')
     eval(eval_)
     return None
 
@@ -48,11 +51,30 @@ def update_options(value):
 
 
 def run_minecraft():
-    global run_button, Ctrl_C, stop_button, Running
+    global run_button, stop_button, Ctrl_C, Running, s, whil, a
+
+    def jiancha():
+        global run_button, stop_button, Ctrl_C, Running, s, whil, a
+        while 1:
+            if Ctrl_C == 1 and s == 0:
+                s_label.configure(text="正在关闭")
+                # TODO: 我不想使用kill方法强制关闭，而是使用stop指令关闭，但还没有找到方法。
+                # time.sleep(1)
+                # print('关闭命令', a.pid, psutil.Process(a.pid).children(recursive=True)[-1].pid)
+                subprocess.Popen(f'taskkill -f -pid {psutil.Process(a.pid).children(recursive=True)[-1].pid}', shell=False, stdout=subprocess.PIPE, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
+
+                # os.kill(psutil.Process(a.pid).children(recursive=True)[-1].pid, signal.CTRL_C_EVENT)
+                # a.kill()
+                # a.communicate(b'stop\n')
+                s = 1
+            if whil == 0:
+                break
+            time.sleep(1)
 
     hexin = hexin_var.get()
 
     kongzhi = tk.Toplevel()
+    kongzhi.iconbitmap(file_ + r"\xue.ico")
     run_button.config(state="disabled")
 
     # information = []
@@ -102,12 +124,29 @@ def run_minecraft():
                                 font=custom_font)
         stop_button.place(x=200, y=10)
 
+        '''statue_label = tk.Label(kongzhi, text="状态：", font=custom_font)
+statue_label.place(x=10, y=10)
+
+s_label = tk.Label(kongzhi, text='加载中', font=custom_font)
+s_label.place(x=100, y=10)
+
+stop_button = tk.Button(kongzhi, text="直接停止",
+                        command=lambda: change('Ctrl_C', '1', 'stop_button.config(state="disabled")'),
+                        font=custom_font)
+stop_button.place(x=200, y=10)'''
+
+        time.sleep(1000)
+
         Running = 1
         a = subprocess.Popen(command, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                             stderr=subprocess.STDOUT)
+                             stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
         s = 0
+        whil = 1
         now = '出现未知错误！'
         lastlog = []
+        # todo
+
+        threading.Thread(target=jiancha).start()
         while 1:
             line = a.stdout.readline()
             if not line:
@@ -124,21 +163,15 @@ def run_minecraft():
                 os.system(r'notepad eula.txt')
             # print(line, b"FAILED TO BIND TO PORT" in line)
 
-            if Ctrl_C == 1 and s == 0:
-                s_label.configure(text="正在关闭")
-                # TODO: 我不想使用kill方法强制关闭，而是使用stop指令关闭，但还没有找到方法。
-                time.sleep(1)
-                a.kill()
-                # a.communicate(b'stop\n')
-                s = 1
-
             if len(lastlog) == 30:
                 del lastlog[0]
             lastlog.append(line)
 
+        whil = 0
+
         run_button.config(state="normal")
         kongzhi.destroy()
-        if now != '运行完毕':
+        if now != '运行完毕' and Ctrl_C == 0:
             name = f"./{time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))}log_（{information[0]})({information[1]})({information[2]}）.txt"
             logfile = open(name, 'wb')
             logtext = command.encode() + b'\n'
@@ -146,14 +179,16 @@ def run_minecraft():
                 logtext += ii
             logfile.write(logtext)
             logfile.close()
-            easygui.msgbox(now + '\n最后30条日志被保存在：' + os.path.abspath(name))
+            messagebox.showinfo(message=now + '\n最后30条日志被保存在：' + os.path.abspath(name), title="Minecraft启动器")
+        if Ctrl_C == 1:
+            messagebox.showinfo(message='已结束', title="Minecraft启动器")
         else:
-            easygui.msgbox(now)
+            messagebox.showinfo(message=now, title="Minecraft启动器")
         Ctrl_C = 0
     else:  # information[0] == "基岩版"
         Running = 1
         subprocess.run(command)
-        easygui.msgbox('运行完毕')
+        messagebox.showinfo(message="运行完毕", title="Minecraft启动器")
     Running = 0
     os.chdir('../..')
 
@@ -181,7 +216,7 @@ def down_minecraft():
         url = data["downloads"]["client"]["url"]
         messagebox.showinfo(message="正在下载，请稍等片刻...", title="Minecraft启动器")
         urllib.request.urlretrieve(url, f"./hexin/Java Edit/server-{version}.jar")
-        easygui.msgbox("下载完成！", "Minecraft启动器")
+        messagebox.showinfo(message="下载完成！", title="Minecraft启动器")
     elif c == 'plugins':
         os.system('start https://getbukkit.org/download/craftbukkit')
     else:
@@ -193,10 +228,10 @@ def quit():
     exit_button.config(state="disabled")
     if Running == 1:
         if Ctrl_C == 1:
-            easygui.msgbox('请等待服务器关闭。')
+            messagebox.showinfo(message="请等待服务器关闭。", title="Minecraft启动器")
             exit_button.config(state="normal")
             return 1
-        easygui.msgbox('请先关闭服务器。')
+        messagebox.showinfo(message="请先关闭服务器。", title="Minecraft启动器")
         exit_button.config(state="normal")
         return 1
     root.quit()
@@ -261,7 +296,7 @@ if __name__ == '__main__':
         with open(r'.\muban\Java Edit\eula.txt', 'w') as e:
             e.write('#Created by XueQian\neula=true')
 
-        easygui.msgbox('欢入！\n请将核心放置在 hexin 文件夹中，模板放置在 muban 文件夹中。然后重启程序。')
+        messagebox.showinfo(message='欢入！\n请将核心放置在 hexin 文件夹中，模板放置在 muban 文件夹中。然后重启程序。', title="Minecraft启动器")
         sys.exit()
 
     root = tk.Tk()
