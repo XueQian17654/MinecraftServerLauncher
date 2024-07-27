@@ -9,7 +9,7 @@ import pyperclip as cb
 import tkinter as tk
 import urllib.request
 import subprocess
-import threading  # 可能看起来没用，但引用在 272 行（附近）！
+import threading
 import random
 import easygui
 import socket
